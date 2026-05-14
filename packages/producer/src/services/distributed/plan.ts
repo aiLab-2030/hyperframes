@@ -24,8 +24,17 @@
  * never have to handle them.
  */
 
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from "node:fs";
-import { join } from "node:path";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { join, relative, sep } from "node:path";
 import { type CanvasResolution } from "@hyperframes/core";
 import { type EngineConfig, resolveConfig } from "@hyperframes/engine";
 import { defaultLogger, type ProducerLogger } from "../../logger.js";
@@ -46,7 +55,13 @@ import {
 } from "../render/stages/planHash.js";
 import { validateNoGpuEncode, validateNoSystemFonts } from "../render/planValidation.js";
 import { snapshotRuntimeEnv } from "../render/runtimeEnvSnapshot.js";
-import { buildSyntheticRenderJob, readFfmpegVersion, readProducerVersion } from "./shared.js";
+import {
+  buildSyntheticRenderJob,
+  PLAN_VIDEOS_META_RELATIVE_PATH,
+  type PlanVideosJson,
+  readFfmpegVersion,
+  readProducerVersion,
+} from "./shared.js";
 
 /**
  * Caller-supplied configuration for a distributed render. `fps`, `width`,
@@ -130,6 +145,26 @@ export interface PlanResult {
   ffmpegVersion: string;
   producerVersion: string;
 }
+
+/**
+ * Top-level directory names skipped by the `projectDir → planDir/compiled/`
+ * pre-seed copy. Real projects often contain `node_modules/`, VCS metadata,
+ * and harness artifacts that have no business in a planDir — they bloat
+ * the 2 GB planDir cap and slow the S3/Lambda round-trip for no benefit.
+ * Matched against the path relative to `projectDir` so a `projectDir`
+ * whose absolute path happens to contain one of these names (e.g.
+ * `~/work/output/comp/`) doesn't false-positive-skip the entire copy.
+ */
+const PLAN_PROJECT_DIR_SKIP_SEGMENTS = new Set([
+  "node_modules",
+  ".git",
+  ".cache",
+  "output",
+  "failures",
+  "dist",
+  ".next",
+  ".turbo",
+]);
 
 /** Default chunk size in frames (~8s @ 30fps; fits Lambda's 15-min cap). */
 export const DEFAULT_CHUNK_SIZE = 240;
@@ -492,6 +527,28 @@ export async function plan(
   if (!existsSync(workDir)) mkdirSync(workDir, { recursive: true });
   const compiledDir = join(workDir, "compiled");
 
+  // Pre-seed the compiled directory with `projectDir`'s local assets
+  // (style.css, script.js, images, etc.). The chunk worker's file server
+  // serves ONLY from `<planDir>/compiled/`, so without this copy a
+  // composition's `<link rel=stylesheet href=style.css>` 404s and the
+  // first capture lands an unstyled fallback frame. `compileStage`
+  // overwrites the entry HTML afterwards. `dereference: true` resolves
+  // symlinks so the planDir survives S3 / Lambda /tmp round-trips.
+  mkdirSync(compiledDir, { recursive: true });
+  cpSync(projectDir, compiledDir, {
+    recursive: true,
+    dereference: true,
+    filter: (src) => {
+      // cpSync passes the absolute source path. Compare relative-to-projectDir
+      // so a parent directory of projectDir matching a skip name doesn't
+      // false-positive every descendant.
+      const rel = relative(projectDir, src);
+      if (rel === "" || rel.startsWith("..")) return true;
+      const firstSegment = rel.split(sep, 1)[0];
+      return firstSegment === undefined || !PLAN_PROJECT_DIR_SKIP_SEGMENTS.has(firstSegment);
+    },
+  });
+
   // The compiled directory lives at `<planDir>/compiled/` in the final
   // layout. The stages write under `<planDir>/.plan-work/compiled/`; we
   // move the contents over once the staged work completes.
@@ -582,7 +639,9 @@ export async function plan(
     assertNotAborted,
     materializeSymlinks: true,
   });
-  if (extractResult.frameLookup) extractResult.frameLookup.cleanup();
+  // Skip `extractResult.frameLookup.cleanup()`: it would rm-rf each
+  // video's outputDir, but in `plan()` those directories ARE the source
+  // material the renames below move into `planDir/video-frames/`.
 
   // ── Audio ──
   const audioResult = await runAudioStage({
@@ -612,6 +671,30 @@ export async function plan(
 
   if (existsSync(finalCompiledDir)) rmSync(finalCompiledDir, { recursive: true, force: true });
   renameSync(compiledDir, finalCompiledDir);
+
+  // `meta/videos.json` is the contract that makes distributed renders
+  // pixel-comparable to in-process for compositions with video sources —
+  // without it, renderChunk can't rebuild the BeforeCaptureHook and the
+  // page's native `<video>` element decodes the source mp4 ~1 frame
+  // off the pre-extracted images the in-process baseline was captured
+  // from.
+  const planVideosJson: PlanVideosJson = {
+    videos: composition.videos,
+    extracted: (extractResult.extractionResult?.extracted ?? []).map((ext) => ({
+      videoId: ext.videoId,
+      srcPath: ext.srcPath,
+      framePattern: ext.framePattern,
+      fps: ext.fps,
+      totalFrames: ext.totalFrames,
+      metadata: ext.metadata,
+    })),
+  };
+  mkdirSync(join(planDir, "meta"), { recursive: true });
+  writeFileSync(
+    join(planDir, PLAN_VIDEOS_META_RELATIVE_PATH),
+    JSON.stringify(planVideosJson, null, 2),
+    "utf-8",
+  );
 
   const planAudioPath = join(planDir, "audio.aac");
   if (audioResult.hasAudio && existsSync(audioResult.audioOutputPath)) {
