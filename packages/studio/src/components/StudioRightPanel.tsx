@@ -109,6 +109,7 @@ export function StudioRightPanel({
                   <button
                     type="button"
                     onClick={() => setRightPanelTab("design")}
+                    title="Design"
                     className={`h-8 rounded-xl px-3 text-[11px] font-medium transition-colors ${
                       rightPanelTab === "design"
                         ? "bg-neutral-800 text-white"
@@ -120,6 +121,7 @@ export function StudioRightPanel({
                   <button
                     type="button"
                     onClick={() => setRightPanelTab("layers")}
+                    title="Layers"
                     className={`h-8 rounded-xl px-3 text-[11px] font-medium transition-colors ${
                       rightPanelTab === "layers"
                         ? "bg-neutral-800 text-white"
@@ -132,6 +134,7 @@ export function StudioRightPanel({
                     <button
                       type="button"
                       onClick={() => setRightPanelTab("motion")}
+                      title="Motion"
                       className={`h-8 rounded-xl px-3 text-[11px] font-medium transition-colors ${
                         rightPanelTab === "motion"
                           ? "bg-neutral-800 text-white"
@@ -146,6 +149,7 @@ export function StudioRightPanel({
               <button
                 type="button"
                 onClick={() => setRightPanelTab("renders")}
+                title="Renders"
                 className={`h-8 rounded-xl px-3 text-[11px] font-medium transition-colors ${
                   rightPanelTab === "renders"
                     ? "bg-neutral-800 text-white"

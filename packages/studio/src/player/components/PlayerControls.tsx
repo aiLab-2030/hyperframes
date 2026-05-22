@@ -342,6 +342,7 @@ export const PlayerControls = memo(function PlayerControls({
       {/* Play/Pause button */}
       <button
         type="button"
+        title={isPlaying ? "Pause" : "Play"}
         aria-label={isPlaying ? "Pause" : "Play"}
         onClick={() => {
           trackStudioEvent("playback", { action: isPlaying ? "pause" : "play" });
@@ -528,6 +529,7 @@ export const PlayerControls = memo(function PlayerControls({
           type="button"
           onClick={() => setShowSpeedMenu((v) => !v)}
           disabled={disabled}
+          title="Playback speed"
           className="w-10 px-2 py-1 rounded-md text-[10px] font-mono tabular-nums transition-colors"
           style={{ color: "#71717A", background: "rgba(255,255,255,0.04)" }}
         >
@@ -664,6 +666,7 @@ export const PlayerControls = memo(function PlayerControls({
               ? "border-neutral-600 text-neutral-200 bg-neutral-800"
               : "border-neutral-800 text-neutral-600 hover:text-neutral-300 hover:border-neutral-600"
           }`}
+          title="Shortcuts and tools"
           aria-label="Shortcuts and tools"
           aria-expanded={showShortcuts}
         >
@@ -712,6 +715,7 @@ export const PlayerControls = memo(function PlayerControls({
                 <button
                   type="submit"
                   disabled={disabled}
+                  title="Jump to frame"
                   className="h-6 px-2 rounded border border-neutral-700 text-[10px] text-neutral-300 transition-colors hover:border-neutral-500 hover:bg-neutral-800 disabled:opacity-40"
                 >
                   Go
@@ -745,6 +749,7 @@ export const PlayerControls = memo(function PlayerControls({
                           type="button"
                           onClick={() => setInPoint(null)}
                           className="w-4 h-4 flex items-center justify-center rounded text-neutral-500 hover:text-neutral-200 transition-colors"
+                          title="Clear in-point"
                           aria-label="Clear in-point"
                         >
                           <svg
@@ -784,6 +789,7 @@ export const PlayerControls = memo(function PlayerControls({
                           type="button"
                           onClick={() => setOutPoint(null)}
                           className="w-4 h-4 flex items-center justify-center rounded text-neutral-500 hover:text-neutral-200 transition-colors"
+                          title="Clear out-point"
                           aria-label="Clear out-point"
                         >
                           <svg
